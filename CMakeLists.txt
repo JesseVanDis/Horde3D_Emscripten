@@ -3,6 +3,8 @@ cmake_minimum_required(VERSION 3.14) # Native support for Android in CMAKE requi
 # Project details.
 project(Horde3D)
 
+set(CMAKE_VERBOSE_MAKEFILE on)
+
 set(CMAKE_CXX_STANDARD 11)
 
 SET(${PROJECT_NAME}_MAJOR_VERSION 2)
@@ -52,7 +54,14 @@ if(HORDE3D_BUILD_EXAMPLES)
             set( HORDE3D_FORCE_DOWNLOAD_SDL OFF )
         endif()
 
-        find_package(SDL2)
+        IF( ${CMAKE_SYSTEM_NAME} STREQUAL "Emscripten" )
+            add_definitions( "--use-port=sdl2" ) # With this flag emscripten itself will handle the rest, including include-directories and linking
+            add_link_options( "--use-port=sdl2" )
+            set(SDL2_FOUND TRUE)
+        ELSE()
+            find_package(SDL2)
+        ENDIF()
+
         IF(SDL2_FOUND)
             include_directories(${SDL2_INCLUDE_DIR})
         ENDIF(SDL2_FOUND)
@@ -68,32 +77,10 @@ else()
     message("Not building examples.")
 endif(HORDE3D_BUILD_EXAMPLES)
 
-# Render backend selection
+# Render backend selection defaults
 option(HORDE3D_USE_GL2 "Add OpenGL 2 render backend. Turns off ES3 render backend." ON)
 option(HORDE3D_USE_GL4 "Add OpenGL 4 render backend. Turns off ES3 render backend." ON)
 option(HORDE3D_USE_GLES3 "Add OpenGL ES 3 render backend. Turns off desktop GL backends." OFF)
-
-if(HORDE3D_USE_GLES3)
-	set(USE_GLES3 TRUE)
-	set(HORDE3D_USE_GL2 OFF CACHE BOOL "Add OpenGL 2 render backend. Turns off ES3 render backend." FORCE)
-	set(HORDE3D_USE_GL4 OFF CACHE BOOL "Add OpenGL 4 render backend. Turns off ES3 render backend." FORCE)
-endif(HORDE3D_USE_GLES3)
-
-if(HORDE3D_USE_GL2 OR HORDE3D_USE_GL4)
-	if(HORDE3D_USE_GL2)
-		set(USE_GL2 TRUE)
-	endif(HORDE3D_USE_GL2)
-	
-	if(HORDE3D_USE_GL4)
-		set(USE_GL4 TRUE)
-	endif(HORDE3D_USE_GL4)
-	
-	set(HORDE3D_USE_GLES3 OFF CACHE BOOL "Add OpenGL ES 3 render backend. Turns off desktop GL backends." FORCE)
-endif(HORDE3D_USE_GL2 OR HORDE3D_USE_GL4)
-
-if (NOT HORDE3D_USE_GL2 AND NOT HORDE3D_USE_GL4 AND NOT HORDE3D_USE_GLES3 )
-    message( SEND_ERROR "Rendering backend is not selected!")
-endif()
 
 # Set binaries output folder.
 SET(HORDE3D_OUTPUT_PATH_PREFIX "${PROJECT_BINARY_DIR}/Binaries")
@@ -142,11 +129,52 @@ IF( ${CMAKE_SYSTEM_NAME} MATCHES "iOS" )
     set(HORDE3D_USE_GLES3 ON CACHE BOOL "Add OpenGL ES 3 render backend. Turns off desktop GL backends." FORCE)
 ENDIF()
 
+
+if( ${CMAKE_SYSTEM_NAME} MATCHES "Emscripten" )
+    # WebGL Only support OpenGL ES
+    set(HORDE3D_EMSCRIPTEN_STACK_SIZE 524288 CACHE STRING "emscripten stack size (-sSTACKSIZE=...)")
+    if(NOT HORDE3D_EMSCRIPTEN_STACK_SIZE)
+        set(HORDE3D_EMSCRIPTEN_STACK_SIZE 524288)
+    endif()
+
+    set(USE_GLES3 TRUE)
+    set(HORDE3D_USE_GL2 OFF CACHE BOOL "Add OpenGL 2 render backend. Turns off ES3 render backend." FORCE)
+    set(HORDE3D_USE_GL4 OFF CACHE BOOL "Add OpenGL 4 render backend. Turns off ES3 render backend." FORCE)
+    set(HORDE3D_USE_GLES3 ON CACHE BOOL "Add OpenGL ES 3 render backend. Turns off desktop GL backends." FORCE)
+
+    set(CMAKE_EXECUTABLE_SUFFIX ".html")
+
+    add_link_options( -sFULL_ES3 )
+    add_link_options( -sSTACK_SIZE=${HORDE3D_EMSCRIPTEN_STACK_SIZE} )
+endif()
+
 IF(MSVC)
     SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /ENTRY:mainCRTStartup ")
     add_definitions(-D_CRT_SECURE_NO_WARNINGS)
 ENDIF(MSVC)
 
+# Render backend selection
+if(HORDE3D_USE_GLES3)
+    set(USE_GLES3 TRUE)
+    set(HORDE3D_USE_GL2 OFF CACHE BOOL "Add OpenGL 2 render backend. Turns off ES3 render backend." FORCE)
+    set(HORDE3D_USE_GL4 OFF CACHE BOOL "Add OpenGL 4 render backend. Turns off ES3 render backend." FORCE)
+endif(HORDE3D_USE_GLES3)
+
+if(HORDE3D_USE_GL2 OR HORDE3D_USE_GL4)
+    if(HORDE3D_USE_GL2)
+        set(USE_GL2 TRUE)
+    endif(HORDE3D_USE_GL2)
+
+    if(HORDE3D_USE_GL4)
+        set(USE_GL4 TRUE)
+    endif(HORDE3D_USE_GL4)
+
+    set(HORDE3D_USE_GLES3 OFF CACHE BOOL "Add OpenGL ES 3 render backend. Turns off desktop GL backends." FORCE)
+endif(HORDE3D_USE_GL2 OR HORDE3D_USE_GL4)
+
+if (NOT HORDE3D_USE_GL2 AND NOT HORDE3D_USE_GL4 AND NOT HORDE3D_USE_GLES3 )
+    message( SEND_ERROR "Rendering backend is not selected!")
+endif()
 
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -D_DEBUG" )
 
